@@ -1,34 +1,39 @@
 import streamlit as st
-import fitz  # PyMuPDF
-from omniparser import OmniParser
+from google.cloud import vision
+from google.cloud.vision import types
 import io
+from PIL import Image
 
-# Set the title of the app
-st.title("Gujarati Newspaper Text Extractor from PDF using OmniParser")
+# Set up Google Cloud Vision client
+def create_vision_client():
+    return vision.ImageAnnotatorClient()
 
-# Upload PDF file
-uploaded_file = st.file_uploader("Choose a scanned PDF of a Gujarati newspaper", type=["pdf"])
+# Function to perform OCR using Google Cloud Vision API
+def detect_text(image):
+    client = create_vision_client()
+    content = image.read()
+    image = types.Image(content=content)
+    response = client.text_detection(image=image)
+    texts = response.text_annotations
+    if response.error.message:
+        raise Exception(f'{response.error.message}')
+    return texts[0].description if texts else ""
+
+# Streamlit app
+st.title("Gujarati OCR with Google Cloud Vision API")
+
+# File uploader
+uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # Read the PDF file
-    pdf_document = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+    # Open the image file
+    image = Image.open(uploaded_file)
+    st.image(image, caption='Uploaded Image', use_column_width=True)
 
-    # Initialize a variable to hold the extracted text
-    extracted_text = ""
-
-    # Process each page in the PDF
-    for page_num in range(len(pdf_document)):
-        page = pdf_document[page_num]
-        pix = page.get_pixmap()  # Render page to an image
-        img_bytes = pix.tobytes()  # Get image bytes
-
-        # Use OmniParser to extract text from the image
-        parser = OmniParser()
-        result = parser.parse_image(img_bytes)
-
-        # Append the extracted text
-        extracted_text += f"--- Page {page_num + 1} ---\n{result['text']}\n\n"
-
-    # Display the extracted text
-    st.subheader("Extracted Text:")
-    st.text_area("Text Output", extracted_text, height=300)
+    # Perform OCR using Google Cloud Vision API
+    try:
+        extracted_text = detect_text(uploaded_file)
+        st.subheader("Extracted Text:")
+        st.write(extracted_text)
+    except Exception as e:
+        st.error(f"Error: {e}")
